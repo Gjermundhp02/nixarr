@@ -316,70 +316,73 @@ in {
       };
     };
 
-    systemd.services.natpmp =
-      mkIf cfg.vpn.natPmp.enable {
-        enable = true;
-        description = "NAT-PMP Port Forwarding Service for VPN";
-        after = ["network.target" "vpn-wg.service"];
-        serviceConfig = {
-          Type = "oneshot";
-          User = "root";
-        };
-        script = let
-          natpmpScript = pkgs.writeShellApplication {
-            name = "natpmp-refresh";
-
-            runtimeInputs = with pkgs; [miniupnpc];
-
-            text = ''
-              set -u
-
-              renew_port() {
-                protocol="$1"
-                port_file="$HOME/.local/state/transmission-$protocol-port"
-
-                result="$(${pkgs.libnatpmp}/bin/natpmpc -a 1 0 "$protocol" 60 -g ${cfg.vpn.natPmp.providerIP})"
-                echo "$result"
-
-                new_port="$(echo "$result" | ${pkgs.ripgrep}/bin/rg --only-matching --replace '$1' 'Mapped public port (\d+) protocol ... to local port 0 lifetime 60')"
-                old_port="$(cat "$port_file")"
-                echo "Mapped new $protocol port $new_port, old one was $old_port."
-                echo "$new_port" >"$port_file"
-
-                if ${pkgs.iptables}/bin/iptables -C INPUT -p "$protocol" --dport "$new_port" -j ACCEPT
-                then
-                  echo "New $protocol port $new_port already open, not opening again."
-                else
-                  echo "Opening new $protocol port $new_port."
-                  ${pkgs.iptables}/bin/iptables -I INPUT -p "$protocol" --dport "$new_port" -j ACCEPT
-                fi
-
-                if [ "$protocol" = tcp ]
-                then
-                  echo "Telling transmission to listen on peer port $new_port."
-                  ${cfg.transmission.package}/bin/transmission-remote --port "$new_port"
-                fi
-
-                if [ "$new_port" -eq "$old_port" ]
-                then
-                  echo "New $protocol port $new_port is the same as old port $old_port, not closing old port."
-                else
-                  if ${pkgs.iptables}/bin/iptables -C INPUT -p "$protocol" --dport "$old_port" -j ACCEPT
-                  then
-                    echo "Closing old $protocol port $old_port."
-                    ${pkgs.iptables}/bin/iptables -D INPUT -p "$protocol" --dport "$old_port" -j ACCEPT
-                  else
-                    echo "Old $protocol port $old_port not open, not attempting to close."
-                  fi
-                fi
-              }
-
-              renew_port udp
-              renew_port tcp
-            '';
-          };
-        in "${natpmpScript}/bin/natpmp-refresh";
+    systemd.services.natpmp = mkIf cfg.vpn.natPmp.enable {
+      enable = true;
+      description = "NAT-PMP Port Forwarding Service for VPN";
+      after = ["network.target" "vpn-wg.service"];
+      serviceConfig = {
+        Type = "oneshot";
+        User = "root";
       };
+      vpnConfinement = {
+        enable = true;
+        vpnNamespace = "wg";
+      };
+      script = let
+        natpmpScript = pkgs.writeShellApplication {
+          name = "natpmp-refresh";
+
+          runtimeInputs = with pkgs; [miniupnpc];
+
+          text = ''
+            set -u
+
+            renew_port() {
+              protocol="$1"
+              port_file="$HOME/.local/state/transmission-$protocol-port"
+
+              result="$(${pkgs.libnatpmp}/bin/natpmpc -a 1 0 "$protocol" 60 -g ${cfg.vpn.natPmp.providerIP})"
+              echo "$result"
+
+              new_port="$(echo "$result" | ${pkgs.ripgrep}/bin/rg --only-matching --replace '$1' 'Mapped public port (\d+) protocol ... to local port 0 lifetime 60')"
+              old_port="$(cat "$port_file")"
+              echo "Mapped new $protocol port $new_port, old one was $old_port."
+              echo "$new_port" >"$port_file"
+
+              if ${pkgs.iptables}/bin/iptables -C INPUT -p "$protocol" --dport "$new_port" -j ACCEPT
+              then
+                echo "New $protocol port $new_port already open, not opening again."
+              else
+                echo "Opening new $protocol port $new_port."
+                ${pkgs.iptables}/bin/iptables -I INPUT -p "$protocol" --dport "$new_port" -j ACCEPT
+              fi
+
+              if [ "$protocol" = tcp ]
+              then
+                echo "Telling transmission to listen on peer port $new_port."
+                ${cfg.transmission.package}/bin/transmission-remote --port "$new_port"
+              fi
+
+              if [ "$new_port" -eq "$old_port" ]
+              then
+                echo "New $protocol port $new_port is the same as old port $old_port, not closing old port."
+              else
+                if ${pkgs.iptables}/bin/iptables -C INPUT -p "$protocol" --dport "$old_port" -j ACCEPT
+                then
+                  echo "Closing old $protocol port $old_port."
+                  ${pkgs.iptables}/bin/iptables -D INPUT -p "$protocol" --dport "$old_port" -j ACCEPT
+                else
+                  echo "Old $protocol port $old_port not open, not attempting to close."
+                fi
+              fi
+            }
+
+            renew_port udp
+            renew_port tcp
+          '';
+        };
+      in "${natpmpScript}/bin/natpmp-refresh";
+    };
 
     systemd.services.vpn-test-service = mkIf cfg.vpn.vpnTestService.enable {
       enable = true;
