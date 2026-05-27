@@ -310,8 +310,8 @@ in {
     systemd.timers.natpmp = {
       wantedBy = ["timers.target"];
       timerConfig = {
-        OnBootSec = "${cfg.vpn.natPmp.refreshInterval}s";
-        OnUnitActiveSec = "${cfg.vpn.natPmp.refreshInterval}s";
+        OnBootSec = "${toString cfg.vpn.natPmp.refreshInterval}s";
+        OnUnitActiveSec = "${toString cfg.vpn.natPmp.refreshInterval}s";
         Unit = "natpmp.service";
       };
     };
