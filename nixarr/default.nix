@@ -193,7 +193,7 @@ in {
       };
 
       natPmp.refreshInterval = mkOption {
-        type = types.natural;
+        type = types.ints.positive;
         default = 45;
         example = 45;
         description = ''
@@ -202,7 +202,7 @@ in {
       };
 
       natPmp.providerIP = mkOption {
-        type = with types; nullOr types.ip;
+        type = types.str;
         default = "10.2.0.1";
         example = "10.2.0.1";
       };
