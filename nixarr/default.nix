@@ -183,6 +183,30 @@ in {
         };
       };
 
+      natPmp.enable = mkOption {
+        type = types.bool;
+        default = false;
+        example = true;
+        description = ''
+          Whether or not to enable NAT-PMP port forwarding on the VPN connection.
+        '';
+      };
+
+      natPmp.refreshInterval = mkOption {
+        type = types.natural;
+        default = 45;
+        example = 45;
+        description = ''
+          The interval, in seconds, for refreshing NAT-PMP port mappings.
+        '';
+      };
+
+      natPmp.providerIP = mkOption {
+        type = with types; nullOr types.ip;
+        default = "10.2.0.1";
+        example = "10.2.0.1";
+      };
+
       openTcpPorts = mkOption {
         type = with types; listOf port;
         default = [];
@@ -245,6 +269,12 @@ in {
           to be set, but it was not.
         '';
       }
+      {
+        assertion = cfg.transmission.vpn.enableNATPmp -> cfg.vpn.enable;
+        message = ''
+          The nixarr.transmission.vpn.enableNATPmp option requires the nixarr.vpn.enable option to be set to true, but it was not.
+        '';
+      }
     ];
 
     users.groups.media.members = cfg.mediaUsers;
@@ -276,6 +306,81 @@ in {
         ++ cfg.vpn.accessibleFrom;
       wireguardConfigFile = cfg.vpn.wgConf;
     };
+
+    systemd.timers.natpmp = {
+      wantedBy = ["timers.target"];
+      timerConfig = {
+        OnBootSec = "${cfg.vpn.natPmp.refreshInterval}s";
+        OnUnitActiveSec = "${cfg.vpn.natPmp.refreshInterval}s";
+        Unit = "natpmp.service";
+      };
+    };
+
+    systemd.services.natpmp =
+      mkIf cfg.vpn.natpmp.enable
+      && cfg.vpn.enable {
+        enable = true;
+        description = "NAT-PMP Port Forwarding Service for VPN";
+        after = ["network.target" "vpn-wg.service"];
+        serviceConfig = {
+          Type = "oneshot";
+          User = "root";
+        };
+        script = let
+          natpmpScript = pkgs.writeShellApplication {
+            name = "natpmp-refresh";
+
+            runtimeInputs = with pkgs; [miniupnpc];
+
+            text = ''
+              set -u
+
+              renew_port() {
+                protocol="$1"
+                port_file="$HOME/.local/state/transmission-$protocol-port"
+
+                result="$(${pkgs.libnatpmp}/bin/natpmpc -a 1 0 "$protocol" 60 -g ${cfg.vpn.natPmp.providerIP})"
+                echo "$result"
+
+                new_port="$(echo "$result" | ${pkgs.ripgrep}/bin/rg --only-matching --replace '$1' 'Mapped public port (\d+) protocol ... to local port 0 lifetime 60')"
+                old_port="$(cat "$port_file")"
+                echo "Mapped new $protocol port $new_port, old one was $old_port."
+                echo "$new_port" >"$port_file"
+
+                if ${pkgs.iptables}/bin/iptables -C INPUT -p "$protocol" --dport "$new_port" -j ACCEPT
+                then
+                  echo "New $protocol port $new_port already open, not opening again."
+                else
+                  echo "Opening new $protocol port $new_port."
+                  ${pkgs.iptables}/bin/iptables -I INPUT -p "$protocol" --dport "$new_port" -j ACCEPT
+                fi
+
+                if [ "$protocol" = tcp ]
+                then
+                  echo "Telling transmission to listen on peer port $new_port."
+                  ${pkgs.transmission}/bin/transmission-remote --port "$new_port"
+                fi
+
+                if [ "$new_port" -eq "$old_port" ]
+                then
+                  echo "New $protocol port $new_port is the same as old port $old_port, not closing old port."
+                else
+                  if ${pkgs.iptables}/bin/iptables -C INPUT -p "$protocol" --dport "$old_port" -j ACCEPT
+                  then
+                    echo "Closing old $protocol port $old_port."
+                    ${pkgs.iptables}/bin/iptables -D INPUT -p "$protocol" --dport "$old_port" -j ACCEPT
+                  else
+                    echo "Old $protocol port $old_port not open, not attempting to close."
+                  fi
+                fi
+              }
+
+              renew_port udp
+              renew_port tcp
+            '';
+          };
+        in "${natpmpScript}/bin/natpmp-refresh";
+      };
 
     systemd.services.vpn-test-service = mkIf cfg.vpn.vpnTestService.enable {
       enable = true;

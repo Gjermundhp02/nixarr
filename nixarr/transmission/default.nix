@@ -149,6 +149,15 @@ in {
       defaultText = literalExpression "nixarr.transmission.vpn.enable";
     };
 
+    vpn.enableNATPmp = mkOption {
+      type = types.bool;
+      default = false;
+      example = true;
+      description = ''
+        Whether or not to enable NAT-PMP port forwarding on the VPN connection.
+      '';
+    };
+
     flood.enable = mkEnableOption "the flood web-UI for the transmission web-UI.";
 
     privateTrackers = {
