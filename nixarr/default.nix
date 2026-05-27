@@ -317,7 +317,7 @@ in {
     };
 
     systemd.services.natpmp =
-      mkIf cfg.vpn.natpmp.enable {
+      mkIf cfg.vpn.natPmp.enable {
         enable = true;
         description = "NAT-PMP Port Forwarding Service for VPN";
         after = ["network.target" "vpn-wg.service"];
