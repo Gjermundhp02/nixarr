@@ -281,6 +281,7 @@ in {
 
     systemd.tmpfiles.rules = [
       "d '${cfg.mediaDir}'  2775 ${globals.libraryOwner.user} ${globals.libraryOwner.group} - -"
+      "d '${cfg.stateDir}/natpmp'  2775 ${globals.libraryOwner.user} ${globals.libraryOwner.group} - -"
     ];
 
     environment.systemPackages = with pkgs; [
@@ -316,6 +317,8 @@ in {
       };
     };
 
+    
+
     systemd.services.natpmp = mkIf cfg.vpn.natPmp.enable {
       enable = true;
       description = "NAT-PMP Port Forwarding Service for VPN";
@@ -339,13 +342,13 @@ in {
 
             renew_port() {
               protocol="$1"
-              port_file="$HOME/.local/state/transmission-$protocol-port"
+              port_file="${cfg.stateDir}/natpmp/${protocol}_port"
 
               result="$(${pkgs.libnatpmp}/bin/natpmpc -a 1 0 "$protocol" 60 -g ${cfg.vpn.natPmp.providerIP})"
               echo "$result"
 
               new_port="$(echo "$result" | ${pkgs.ripgrep}/bin/rg --only-matching --replace '$1' 'Mapped public port (\d+) protocol ... to local port 0 lifetime 60')"
-              old_port="$(cat "$port_file")"
+              old_port="$(cat "$port_file" || echo "0")"
               echo "Mapped new $protocol port $new_port, old one was $old_port."
               echo "$new_port" >"$port_file"
 
