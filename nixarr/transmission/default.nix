@@ -484,7 +484,7 @@ in {
           to = cfg.uiPort;
         }
       ];
-      openVPNPorts = [
+      openVPNPorts = mkIf (! cfg.vpn.enableNATPmp) [
         {
           port = cfg.peerPort;
           protocol = "both";
