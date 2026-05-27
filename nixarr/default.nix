@@ -363,7 +363,7 @@ in {
               if [ "$protocol" = tcp ]
               then
                 echo "Telling transmission to listen on peer port $new_port."
-                ${cfg.transmission.package}/bin/transmission-remote http://192.168.15.1:9091 --port "$new_port"
+                ${cfg.transmission.package}/bin/transmission-remote http://192.168.15.1:${cfg.transmission.rpcPort}/transmission/rpc/ --port "$new_port"
               fi
 
               if [ "$new_port" -eq "$old_port" ]
