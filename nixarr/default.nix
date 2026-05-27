@@ -342,7 +342,7 @@ in {
 
             renew_port() {
               protocol="$1"
-              port_file="${cfg.stateDir}/natpmp/$protocol_port"
+              port_file="${cfg.stateDir}/natpmp/$protocol-port"
 
               result="$(${pkgs.libnatpmp}/bin/natpmpc -a 1 0 "$protocol" 60 -g ${cfg.vpn.natPmp.providerIP})"
               echo "$result"
